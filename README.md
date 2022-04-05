@@ -12,11 +12,11 @@ Skaffold is a tool that builds various Dockerfiles, tags those files based on a 
 
 Follow these instructions to install Skaffold:
 
-(https://skaffold.dev/docs/install/#standalone-binary)[Install Skaffold]
+[https://skaffold.dev/docs/install/#standalone-binary](Install Skaffold)
 
 ### DOCKER DESKTOP
 Make sure Docker Desktop is configured to run as Kubernetes:
-(https://docs.docker.com/desktop/kubernetes/)[Docker Desktop Kubernetes Mode]
+[https://docs.docker.com/desktop/kubernetes/](Docker Desktop Kubernetes Mode)
 
 ## RUNNING
 

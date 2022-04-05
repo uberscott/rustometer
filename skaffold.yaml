@@ -1,0 +1,22 @@
+apiVersion: skaffold/v1
+kind: Config
+build:
+  local:
+    push: false
+  artifacts:
+    - image: rustometer
+      context: rust/rustometer
+
+
+
+deploy:
+  helm:
+    flags:
+
+    releases:
+    - name: rustometer
+      chartPath: charts/rustometer
+      values:
+        rustometer: rustometer
+
+

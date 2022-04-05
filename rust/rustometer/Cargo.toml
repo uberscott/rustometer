@@ -1,0 +1,23 @@
+[package]
+name = "rustometer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+hyper = { version="0.14", features = ["server","tcp","http2","http1"]}
+tokio = { version = "1.8", features = ["macros", "rt-multi-thread"] }
+tower-http = { version = "0.2.1", features = ["set-header", "trace", "compression-full"] }
+tower-layer = "0.3"
+tower= { version = "0.4.12", features = ["make", "util"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.2", features = ["env-filter", "json"] }
+http = "0.2.6"
+axum = "0.4.8"
+tracing-opentelemetry = "0.17.2"
+ctrlc = "3.2.1"
+opentelemetry = "0.17.0"
+opentelemetry-prometheus = "0.10.0"
+lazy_static = "1.4.0"
+prometheus = "0.13.0"

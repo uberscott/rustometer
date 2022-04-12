@@ -20,6 +20,16 @@ Make sure Docker Desktop is configured to run as Kubernetes:
 
 ## RUNNING
 
+### SETUP PVCS 
+Although we are deploying through Skaffold/Helm we like to retain the same PVCs (Persistent Volumn Claims) we therefore manage the PVCs outside of Skaffold/Helm.
+
+## CREATE PVCS
+Execute this kubectl command to create pvcs:
+```bash
+kubectl create -f pvcs.yaml
+```
+
+
 ### DEPLOY WITH SKAFFOLD
 
 Make sure your kubectl is pointed to your docker desktop kubernetes (this demo will only work on docker desktop)

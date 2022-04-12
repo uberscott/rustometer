@@ -16,14 +16,14 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::SystemTime;
 use opentelemetry::metrics::MetricsError;
-use tracing::error;
+use tracing::{error, info};
 
 
 async fn metrics(
     req: Request<Body>,
     state: Arc<AppState>,
 ) -> Result<Response<Body>, hyper::Error> {
-    println!("Receiving request at path {}", req.uri());
+    info!("Receiving request at path {}", req.uri());
 
     let response = match (req.method(), req.uri().path()) {
         (&Method::GET, "/metrics") => {
@@ -32,7 +32,7 @@ async fn metrics(
             let metric_families = state.exporter.registry().gather();
             encoder.encode(&metric_families, &mut buffer).unwrap();
 
-println!("metrics scraped.");
+            info!("prometheus metrics scraped.");
             Response::builder()
                 .status(200)
                 .header(CONTENT_TYPE, encoder.format_type())
@@ -41,7 +41,7 @@ println!("metrics scraped.");
         }
         _ => Response::builder()
             .status(404)
-            .body(Body::from("Missing Page"))
+            .body(Body::from("Not Found"))
             .unwrap(),
     };
 
@@ -52,7 +52,7 @@ struct AppState {
     exporter: PrometheusExporter,
 }
 
-pub fn init_prometheus_exporter() {
+pub fn init() {
     tokio::spawn( async move {
         let exporter = match opentelemetry_prometheus::exporter().try_init() {
             Ok(exporter) => exporter,
@@ -80,7 +80,7 @@ pub fn init_prometheus_exporter() {
 
         let server = Server::bind(&addr).serve(make_svc);
 
-        println!("Listening on http://{}", addr);
+        info!("Listening on http://{}", addr);
 
         server.await;
     });

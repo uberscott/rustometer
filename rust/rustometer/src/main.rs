@@ -13,60 +13,39 @@ use std::process;
 use axum::response::{Html, IntoResponse};
 use axum::Router;
 use axum::routing::{any, get};
-use tracing::{Span, trace};
+use tracing::{error, info, Span, trace};
 use opentelemetry::{global, KeyValue, sdk::export::trace::stdout, trace::Tracer};
-use crate::prometheus::init_prometheus_exporter;
-
-
-// Our request handler. This is where we would implement the application logic
-// for responding to HTTP requests...
-async fn handler(request: Request<Body>) -> Result<Response<Body>, Error> {
-    Ok(Response::new(Body::from("Hello, World!")))
-}
-
-async fn root() -> &'static str {
-    "Hello World!"
-}
-
-async fn count() -> impl IntoResponse {
-println!("inc counter...");
-    let meter = global::meter("service");
-    // create an instrument
-    match meter.u64_counter("counter").try_init() {
-        Ok(counter) => {
-            counter.add(1, &[]);
-            (StatusCode::OK, Html("Count Incremented"))
-        }
-        Err(err) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, Html("Error"))
-        }
-    }
-}
-
-
+use rand::RngCore;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::Registry;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
+    // Let's be sure to bomb out if CTRL-C is mashed
     ctrlc::set_handler(move || {
         process::exit(0);
     }).expect("Error setting Ctrl-C handler");
 
     tracing_subscriber::fmt::init();
-    init_prometheus_exporter();
 
-    // Create a new trace pipeline that prints to stdout
+    // Create a new OpenTelemetry pipeline
     let tracer = stdout::new_pipeline().install_simple();
 
-    tracer.in_span("doing_work", |cx| {
-            // Traced app logic here...
-    });
+// Create a tracing layer with the configured tracer
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    // Shutdown trace pipeline
-    global::shutdown_tracer_provider();
+// Use the tracing subscriber `Registry`, or any other subscriber
+// that impls `LookupSpan`
+    let subscriber = Registry::default().with(telemetry);
+
+//    let tracer = stdout::new_pipeline().install_simple();
+    prometheus::init();
 
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", any(root))
+        .route("/trace", any(trace))
+        .route("/work_span", any(work_span))
         .route("/count", any(count));
     let app = app.layer(TraceLayer::new_for_http());
 
@@ -81,6 +60,72 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
     Ok(())
 }
+
+async fn root() -> impl IntoResponse {
+
+    (StatusCode::OK, Html(
+    r#"
+    <html>
+        <head>
+           <title>Telemetry POC</title>
+        </head>
+        <body>
+           <ul>
+           <li><a href="/count">Increment Count</a></li>
+           <li><a href="/trace">Trace</a></li>
+           <li><a href="/work_span">Work Span</a></li>
+        </body>
+    </html>
+    "#))
+}
+
+async fn trace() -> &'static str {
+    info!("trace called");
+    "trace"
+}
+
+async fn count() -> impl IntoResponse {
+println!("inc counter...");
+    info!("counter called");
+    let meter = global::meter("service");
+    // create an instrument
+    match meter.u64_counter("counter").try_init() {
+        Ok(counter) => {
+            counter.add(1, &[]);
+            (StatusCode::OK, Html("Count Incremented"))
+        }
+        Err(err) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Html("Error"))
+        }
+    }
+}
+
+async fn work_span() -> impl IntoResponse {
+    let tracer = global::tracer("work_span");
+    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    println!("work span called");
+
+    tracer.in_span("work_span", |cx| {
+        info!("doing work...");
+        let meter = global::meter("service");
+        match meter.u64_value_recorder("difficulty").try_init() {
+            Ok(rec) => {
+                let mut rng = rand::thread_rng();
+                let rating = rng.next_u64();
+                rec.measurement(rating);
+            }
+            Err(err) => {
+                error!("{}",err.to_string())
+            }
+        }
+    });
+
+    (StatusCode::OK, Html("Work Ended"))
+}
+
+
+
+
 
 
 /*

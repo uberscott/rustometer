@@ -29,10 +29,16 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+
+
 
       volumes:
         - name: config
           configMap:
             name: prometheus
-
+        - name: data
+          persistentVolumeClaim:
+             claimName: prometheus
 

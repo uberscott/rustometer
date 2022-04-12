@@ -16,8 +16,9 @@ use axum::routing::{any, get};
 use tracing::{error, info, Span, trace};
 use opentelemetry::{global, KeyValue, sdk::export::trace::stdout, trace::Tracer};
 use rand::RngCore;
+use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Registry;
+use tracing_subscriber::{EnvFilter, Registry};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
@@ -26,19 +27,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
         process::exit(0);
     }).expect("Error setting Ctrl-C handler");
 
-    tracing_subscriber::fmt::init();
+    //initializing tracing
+    //tracing_subscriber::fmt::init();
+    let builder = Subscriber::builder();
+    let builder = builder.with_env_filter(EnvFilter::from_default_env());
+    // ironically try_init() returns an error, but if you ignore it tracing works fine...
+    builder.try_init();
 
-    // Create a new OpenTelemetry pipeline
-    let tracer = stdout::new_pipeline().install_simple();
 
-// Create a tracing layer with the configured tracer
-    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    // bridging tracing and opentelemetry
+    // The following is cut and paste from the 'tracing-opentelemetry' crate's readme... BUT IT DOESNT WORK!
+    // It seems the opentelemetry and tracing-opentelemetry crates are a little out of sync... I'm
+    // still digging in on this one trying to resolve.
+    //
+    //let tracer = stdout::new_pipeline().install_simple();
+    //let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    //let subscriber = Registry::default().with(telemetry);
 
-// Use the tracing subscriber `Registry`, or any other subscriber
-// that impls `LookupSpan`
-    let subscriber = Registry::default().with(telemetry);
 
-//    let tracer = stdout::new_pipeline().install_simple();
     prometheus::init();
 
     let app = Router::new()
@@ -102,7 +108,7 @@ println!("inc counter...");
 
 async fn work_span() -> impl IntoResponse {
     let tracer = global::tracer("work_span");
-    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+//    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     println!("work span called");
 
     tracer.in_span("work_span", |cx| {

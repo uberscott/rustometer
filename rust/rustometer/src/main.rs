@@ -35,23 +35,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
     builder.try_init();
 
 
-    // bridging tracing and opentelemetry
-    // The following is cut and paste from the 'tracing-opentelemetry' crate's readme... BUT IT DOESNT WORK!
-    // It seems the opentelemetry and tracing-opentelemetry crates are a little out of sync... I'm
-    // still digging in on this one trying to resolve.
-    //
-    //let tracer = stdout::new_pipeline().install_simple();
-    //let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
-    //let subscriber = Registry::default().with(telemetry);
+    global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+    let tracer = opentelemetry_jaeger::new_pipeline().with_service_name("rustometer").install_simple()?;
 
+    tracer.in_span("main", |cx| {
+        // Traced app logic here...
+    });
 
-    prometheus::init();
+    tracer.in_span("prometheus::init", |cx| {
+        prometheus::init();
+    });
+
 
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", any(root))
         .route("/trace", any(trace))
-        .route("/work_span", any(work_span))
         .route("/count", any(count));
     let app = app.layer(TraceLayer::new_for_http());
 
@@ -79,16 +78,11 @@ async fn root() -> impl IntoResponse {
            <ul>
            <li><a href="/count">Increment Count</a></li>
            <li><a href="/trace">Trace</a></li>
-           <li><a href="/work_span">Work Span</a></li>
         </body>
     </html>
     "#))
 }
 
-async fn trace() -> &'static str {
-    info!("trace called");
-    "trace"
-}
 
 async fn count() -> impl IntoResponse {
 println!("inc counter...");
@@ -106,7 +100,7 @@ println!("inc counter...");
     }
 }
 
-async fn work_span() -> impl IntoResponse {
+async fn trace() -> impl IntoResponse {
     let tracer = global::tracer("work_span");
 //    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     println!("work span called");

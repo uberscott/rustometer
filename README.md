@@ -50,6 +50,13 @@ Use curl to increment the rustometer counter:
 curl http://localhost:8080/count 
 ```  
 
+### EXECUTE TRACE
+Use curl to execute a zipkin trace:
+
+```bash
+curl http://localhost:8080/trace
+```  
+
 
 ### EXECUTE A SEARCH IN PROMETHEUS
 Prometheus should be scraping *rustometer* every 5 seconds.
@@ -68,4 +75,7 @@ username: admin
 password: admin
 
 You can then create a dashboard displaying the present and past count
+
+### ZIPKIN
+Check out your traces: http://localhost:9411
 

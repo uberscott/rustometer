@@ -21,7 +21,7 @@ spec:
       containers:
         - name: "rustometer"
           image: {{ .Values.rustometer }}
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           env:
           - name:  RUST_LOG
             value: rustometer=info

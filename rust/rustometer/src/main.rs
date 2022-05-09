@@ -1,26 +1,64 @@
+#![allow(warnings)]
+
 mod prometheus;
 
 #[macro_use]
 extern crate lazy_static;
 
 
+use std::convert::Infallible;
 use tower_http::{compression::CompressionLayer, trace, trace::TraceLayer};
-use tower::{ServiceBuilder, make::Shared};
+use tower::{ServiceBuilder, make::Shared, MakeService};
 use http::{Request, Response, StatusCode};
 use hyper::{Body, Error, server::Server};
 use std::net::SocketAddr;
 use std::process;
+use std::sync::Arc;
+use std::time::Duration;
 use axum::response::{Html, IntoResponse};
 use axum::Router;
 use axum::routing::{any, get};
+use hyper::service::{make_service_fn, service_fn};
 use tracing::{error, info, Span, trace};
-use opentelemetry::{global, KeyValue, sdk::export::trace::stdout, trace::Tracer};
+use opentelemetry::{global, Key, KeyValue, sdk::export::trace::stdout, trace::Tracer};
+use opentelemetry::trace::TraceContextExt;
 use rand::RngCore;
+use tokio::runtime::Runtime;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
+
+
+fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
+    global::set_text_map_propagator(opentelemetry_zipkin::Propagator::new());
+    let tracer = opentelemetry_zipkin::new_pipeline().with_service_name("fuel_core").with_collector_endpoint("http://zipkin:9411/api/v2/spans").install_simple()?;
+
+    tracer.in_span("doing_work", |cx| {
+        // Traced app logic here...
+    });
+
+
+    tracer.in_span("main", |cx| {
+        // Traced app logic here...
+    });
+
+    tracer.in_span("prometheus::init", |cx| {
+    });
+
+    let runtime = Runtime::new().unwrap();
+    runtime.block_on( async move {
+println!("staring process....");
+        go().await;
+println!("return from go....");
+    } );
+println!("bye");
+    Ok(())
+}
+
+
+async fn go() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+
+    prometheus::init();
 
     // Let's be sure to bomb out if CTRL-C is mashed
     ctrlc::set_handler(move || {
@@ -34,19 +72,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
     // ironically try_init() returns an error, but if you ignore it tracing works fine...
     builder.try_init();
 
-
-    global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-    let tracer = opentelemetry_jaeger::new_pipeline().with_service_name("rustometer").install_simple()?;
-
-    tracer.in_span("main", |cx| {
-        // Traced app logic here...
-    });
-
-    tracer.in_span("prometheus::init", |cx| {
-        prometheus::init();
-    });
-
-
     let app = Router::new()
         // `GET /` goes to `root`
         .route("/", any(root))
@@ -56,7 +81,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
     // And run our service using `hyper`.
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
-    Server::bind(&addr)
+
+   Server::bind(&addr)
         .serve(app.into_make_service())
         .await
         .expect("server error");
@@ -68,8 +94,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
 async fn root() -> impl IntoResponse {
 
-    (StatusCode::OK, Html(
-    r#"
+    global::tracer("my-app").in_span("root", |ctx| {
+        (StatusCode::OK, Html(
+            r#"
     <html>
         <head>
            <title>Telemetry POC</title>
@@ -81,6 +108,7 @@ async fn root() -> impl IntoResponse {
         </body>
     </html>
     "#))
+    })
 }
 
 
@@ -101,23 +129,29 @@ println!("inc counter...");
 }
 
 async fn trace() -> impl IntoResponse {
-    let tracer = global::tracer("work_span");
+    let tracer = global::tracer("parent_span");
 //    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     println!("work span called");
 
-    tracer.in_span("work_span", |cx| {
+    tracer.in_span("parent_span", |cx| async move {
         info!("doing work...");
         let meter = global::meter("service");
-        match meter.u64_value_recorder("difficulty").try_init() {
-            Ok(rec) => {
-                let mut rng = rand::thread_rng();
-                let rating = rng.next_u64();
-                rec.measurement(rating);
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+
+            match meter.u64_value_recorder("difficulty").try_init() {
+                Ok(rec) => {
+                    let mut rng = rand::thread_rng();
+                    let rating = rng.next_u64();
+                    let x = cx.span().add_event("meter", vec![Key::new("rating").i64(rating as i64)]);
+                    rec.measurement(rating);
+                }
+                Err(err) => {
+                    error!("{}",err.to_string());
+                }
             }
-            Err(err) => {
-                error!("{}",err.to_string())
-            }
-        }
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
     });
 
     (StatusCode::OK, Html("Work Ended"))

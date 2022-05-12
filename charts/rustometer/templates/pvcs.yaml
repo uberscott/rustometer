@@ -3,7 +3,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: prometheus
 spec:
-  storageClassName: hostpath
+  storageClassName: gp2
   accessModes:
     - ReadWriteOnce
   resources:
@@ -17,7 +17,7 @@ kind: PersistentVolumeClaim
 metadata:
   name: grafana
 spec:
-  storageClassName: hostpath
+  storageClassName: gp2
   accessModes:
     - ReadWriteOnce
   resources:

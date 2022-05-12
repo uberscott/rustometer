@@ -17,6 +17,11 @@ spec:
         app.kubernetes.io/name: "grafana"
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsNonRoot: true
+        runAsGroup: 65534
+        fsGroup: 2000
       containers:
         - name: "grafana"
           image: "grafana/grafana-oss" 

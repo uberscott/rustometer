@@ -23,7 +23,7 @@ async fn metrics(
     req: Request<Body>,
     state: Arc<AppState>,
 ) -> Result<Response<Body>, hyper::Error> {
-    info!("Receiving request at path {}", req.uri());
+//    info!("Receiving request at path {}", req.uri());
 
     let response = match (req.method(), req.uri().path()) {
         (&Method::GET, "/metrics") => {
@@ -32,7 +32,7 @@ async fn metrics(
             let metric_families = state.exporter.registry().gather();
             encoder.encode(&metric_families, &mut buffer).unwrap();
 
-            info!("prometheus metrics scraped.");
+//            info!("prometheus metrics scraped.");
             Response::builder()
                 .status(200)
                 .header(CONTENT_TYPE, encoder.format_type())

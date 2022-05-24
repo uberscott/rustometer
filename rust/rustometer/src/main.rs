@@ -7,7 +7,7 @@ extern crate lazy_static;
 
 
 use std::convert::Infallible;
-use tower_http::{compression::CompressionLayer, trace, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 use tower::{ServiceBuilder, make::Shared, MakeService};
 use http::{Request, Response, StatusCode};
 use hyper::{Body, Error, server::Server};
@@ -19,7 +19,7 @@ use axum::response::{Html, IntoResponse};
 use axum::Router;
 use axum::routing::{any, get};
 use hyper::service::{make_service_fn, service_fn};
-use tracing::{error, info, Span, trace};
+use tracing::{error, info, Span};
 use opentelemetry::{global, Key, KeyValue, sdk::export::trace::stdout, trace::Tracer};
 use opentelemetry::trace::TraceContextExt;
 use rand::RngCore;
@@ -27,11 +27,12 @@ use tokio::runtime::Runtime;
 use tracing_subscriber::fmt::Subscriber;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::{EnvFilter, Registry};
+use opentelemetry::sdk::trace;
 
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
     global::set_text_map_propagator(opentelemetry_zipkin::Propagator::new());
-    let tracer = opentelemetry_zipkin::new_pipeline().with_service_name("fuel_core").with_collector_endpoint("http://zipkin:9411/api/v2/spans").install_simple()?;
+    let tracer = opentelemetry_zipkin::new_pipeline().with_service_name("fuel_core").with_collector_endpoint("http://zipkin:9411/api/v2/spans").with_trace_config(trace::config()).install_simple()?;
 
     tracer.in_span("doing_work", |cx| {
         // Traced app logic here...
@@ -135,24 +136,12 @@ async fn trace() -> impl IntoResponse {
 
     tracer.in_span("parent_span", |cx| async move {
         info!("doing work...");
-        let meter = global::meter("service");
+println!("inside parent_span...");
         tokio::time::sleep(Duration::from_millis(50)).await;
-
-
-            match meter.u64_value_recorder("difficulty").try_init() {
-                Ok(rec) => {
-                    let mut rng = rand::thread_rng();
-                    let rating = rng.next_u64();
-                    let x = cx.span().add_event("meter", vec![Key::new("rating").i64(rating as i64)]);
-                    rec.measurement(rating);
-                }
-                Err(err) => {
-                    error!("{}",err.to_string());
-                }
-            }
-
+println!("is_recording: {}",cx.span().is_recording());
+         cx.span().add_event("meter", vec![Key::new("rating").i64(123)]);
         tokio::time::sleep(Duration::from_millis(50)).await;
-    });
+    }).await;
 
     (StatusCode::OK, Html("Work Ended"))
 }

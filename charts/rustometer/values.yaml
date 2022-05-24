@@ -4,7 +4,9 @@
 
 replicaCount: 1
 
-rustometer: "uberscott/rustometer"
+#rustometer: "uberscott/rustometer"
+
+storageClass: "hostpath"
 
 image:
   repository: nginx

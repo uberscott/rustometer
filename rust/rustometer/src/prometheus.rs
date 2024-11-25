@@ -14,9 +14,10 @@ use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
 use std::convert::Infallible;
 use std::sync::Arc;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use opentelemetry::metrics::MetricsError;
-use tracing::{error, info};
+use rand::{thread_rng, Rng};
+use tracing::{error, info, instrument};
 
 
 async fn metrics(
@@ -86,3 +87,4 @@ pub fn init() {
     });
 
 }
+

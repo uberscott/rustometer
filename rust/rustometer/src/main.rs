@@ -5,6 +5,7 @@ mod prometheus;
 #[macro_use]
 extern crate lazy_static;
 
+use futures::{stream, StreamExt};
 
 use std::convert::Infallible;
 use tower_http::{compression::CompressionLayer, trace::TraceLayer};
@@ -14,64 +15,82 @@ use hyper::{Body, Error, server::Server};
 use std::net::SocketAddr;
 use std::process;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use axum::response::{Html, IntoResponse};
 use axum::Router;
 use axum::routing::{any, get};
 use hyper::service::{make_service_fn, service_fn};
-use tracing::{error, info, Span};
+use tracing::{error, info, instrument, Metadata, Span};
 use opentelemetry::{global, Key, KeyValue, sdk::export::trace::stdout, trace::Tracer};
 use opentelemetry::trace::TraceContextExt;
-use rand::RngCore;
-use tokio::runtime::Runtime;
-use tracing_subscriber::fmt::Subscriber;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{EnvFilter, Registry};
+use rand::{thread_rng, Rng, RngCore};
+use tracing_subscriber::fmt::{Layer as Layer2 };
+use tracing_subscriber::layer::{Context, Filter, SubscriberExt};
 use opentelemetry::sdk::trace;
+use tracing_core::Subscriber;
+use tracing_indicatif::IndicatifLayer;
+use tracing_subscriber::{fmt, EnvFilter, Layer};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::util::SubscriberInitExt;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
 
 
-fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>>{
-    global::set_text_map_propagator(opentelemetry_zipkin::Propagator::new());
-    let tracer = opentelemetry_zipkin::new_pipeline().with_service_name("fuel_core").with_collector_endpoint("http://zipkin:9411/api/v2/spans").with_trace_config(trace::config()).install_simple()?;
 
-    tracer.in_span("doing_work", |cx| {
-        // Traced app logic here...
-    });
+    let indicatif_layer = IndicatifLayer::new();
 
+    tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_writer(indicatif_layer.get_stderr_writer()))
+        .with(indicatif_layer)
+        .init();
 
-    tracer.in_span("main", |cx| {
-        // Traced app logic here...
-    });
+    let res: u64 = stream::iter((0..20).map(|val| do_work(val)))
+        .buffer_unordered(5)
+        .collect::<Vec<u64>>()
+        .await
+        .into_iter()
+        .sum();
 
-    tracer.in_span("prometheus::init", |cx| {
-    });
-
-    let runtime = Runtime::new().unwrap();
-    runtime.block_on( async move {
-println!("staring process....");
+println!("sum {res}");
         go().await;
-println!("return from go....");
-    } );
-println!("bye");
     Ok(())
 }
 
 
+
+#[derive(Clone)]
+struct CountSubscriber {
+    count: Arc<AtomicUsize>,
+}
+
+impl CountSubscriber {
+    fn new() -> Self {
+        Self {
+            count: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn increment(&self) {
+        let c = self.count.fetch_add(1, Ordering::SeqCst);
+        println!("~~count: {}",c);
+
+    }
+
+    fn get_count(&self) -> usize {
+        self.count.load(Ordering::SeqCst)
+    }
+}
 async fn go() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
-    prometheus::init();
+//    prometheus::init();
 
     // Let's be sure to bomb out if CTRL-C is mashed
     ctrlc::set_handler(move || {
         process::exit(0);
     }).expect("Error setting Ctrl-C handler");
 
-    //initializing tracing
-    //tracing_subscriber::fmt::init();
-    let builder = Subscriber::builder();
-    let builder = builder.with_env_filter(EnvFilter::from_default_env());
-    // ironically try_init() returns an error, but if you ignore it tracing works fine...
-    builder.try_init();
 
     let app = Router::new()
         // `GET /` goes to `root`
@@ -113,20 +132,9 @@ async fn root() -> impl IntoResponse {
 }
 
 
+#[instrument]
 async fn count() -> impl IntoResponse {
-println!("inc counter...");
-    info!("counter called");
-    let meter = global::meter("service");
-    // create an instrument
-    match meter.u64_counter("counter").try_init() {
-        Ok(counter) => {
-            counter.add(1, &[]);
-            (StatusCode::OK, Html("Count Incremented"))
-        }
-        Err(err) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, Html("Error"))
-        }
-    }
+            (StatusCode::OK, Html("Count Triggered"))
 }
 
 async fn trace() -> impl IntoResponse {
@@ -135,10 +143,7 @@ async fn trace() -> impl IntoResponse {
     println!("work span called");
 
     tracer.in_span("parent_span", |cx| async move {
-        info!("doing work...");
-println!("inside parent_span...");
         tokio::time::sleep(Duration::from_millis(50)).await;
-println!("is_recording: {}",cx.span().is_recording());
          cx.span().add_event("meter", vec![Key::new("rating").i64(123)]);
         tokio::time::sleep(Duration::from_millis(50)).await;
     }).await;
@@ -198,3 +203,17 @@ async fn main() {
 }
 
  */
+
+#[instrument]
+async fn do_work(val: u64) -> u64 {
+    let sleep_time = thread_rng().gen_range(Duration::from_millis(250)..Duration::from_millis(500));
+    tokio::time::sleep(sleep_time).await;
+
+//    info!("doing work for val: {}", val);
+
+    let sleep_time =
+        thread_rng().gen_range(Duration::from_millis(500)..Duration::from_millis(1000));
+    tokio::time::sleep(sleep_time).await;
+
+    val + 1
+}

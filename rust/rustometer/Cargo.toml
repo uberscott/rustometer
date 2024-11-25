@@ -12,7 +12,8 @@ tower-http = { version = "0.2.1", features = ["set-header", "trace", "compressio
 tower-layer = "0.3"
 tower= { version = "0.4.12", features = ["make", "util"] }
 tracing = "0.1"
-tracing-subscriber = { version = "0.2", features = ["env-filter", "json"] }
+tracing-indicatif = "0.3.6"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 http = "0.2.6"
 axum = "0.4.8"
 tracing-opentelemetry = "0.17.2"
@@ -23,3 +24,5 @@ opentelemetry-zipkin = "0.15.0"
 lazy_static = "1.4.0"
 prometheus = "0.13.0"
 rand = "0.8.5"
+tracing-core = "0.1.32"
+futures = "0.3.26"
